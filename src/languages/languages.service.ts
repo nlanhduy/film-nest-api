@@ -11,7 +11,7 @@ import { Language } from './entities/language.entity'
 export class LanguagesService {
   constructor(
     @InjectRepository(Language)
-    private readonly languageRepository: Repository<Language>,
+    private readonly languageRepository: Repository<Language>
   ) {}
 
   create(createLanguageDto: CreateLanguageDto): Promise<Language> {

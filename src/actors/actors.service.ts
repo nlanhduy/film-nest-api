@@ -11,7 +11,7 @@ import { Actor } from './entities/actor.entity'
 export class ActorsService {
   constructor(
     @InjectRepository(Actor)
-    private actorsRepository: Repository<Actor>,
+    private actorsRepository: Repository<Actor>
   ) {}
 
   create(createActorDto: CreateActorDto) {

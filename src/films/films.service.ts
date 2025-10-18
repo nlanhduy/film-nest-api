@@ -11,7 +11,7 @@ import { Film } from './entities/film.entity'
 export class FilmsService {
   constructor(
     @InjectRepository(Film)
-    private readonly filmRepository: Repository<Film>,
+    private readonly filmRepository: Repository<Film>
   ) {}
 
   create(createFilmDto: CreateFilmDto): Promise<Film> {
