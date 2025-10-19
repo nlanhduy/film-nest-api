@@ -1,10 +1,11 @@
-import { Module } from '@nestjs/common'
+import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common'
 import { ConfigModule } from '@nestjs/config'
 import { TypeOrmModule } from '@nestjs/typeorm'
 
 import { ActorsModule } from './actors/actors.module'
 import { FilmsModule } from './films/films.module'
 import { LanguagesModule } from './languages/languages.module'
+import { ClientAuthMiddleware } from './middleware/client-auth.middleware'
 
 @Module({
   imports: [
@@ -20,4 +21,8 @@ import { LanguagesModule } from './languages/languages.module'
     ActorsModule,
   ],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer.apply(ClientAuthMiddleware).forRoutes('films')
+  }
+}
