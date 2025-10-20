@@ -11,28 +11,135 @@ export class LoggingInterceptor implements NestInterceptor {
     private readonly logger: Logger
   ) {}
 
+  private static readonly REDACTION = '[REDACTED]'
+  private static buildSensitiveKeys(): Set<string> {
+    const defaults = [
+      'password',
+      'pass',
+      'pwd',
+      'token',
+      'access_token',
+      'access-token',
+      'refreshtoken',
+      'refresh_token',
+      'refresh-token',
+      'authorization',
+      'api_key',
+      'api-key',
+      'x-api-key',
+      'secret',
+      'client_secret',
+      'client-secret',
+      'creditcard',
+      'cardnumber',
+      'cvv',
+      'ssn',
+      'otp',
+      'pin',
+      'cookie',
+      'set-cookie',
+    ]
+    const extra = (process.env.LOG_SENSITIVE_KEYS ?? '')
+      .split(',')
+      .map((s) => s.trim().toLowerCase())
+      .filter(Boolean)
+    return new Set<string>([...defaults, ...extra])
+  }
+  private static readonly SENSITIVE_KEYS = LoggingInterceptor.buildSensitiveKeys()
+
+  // Deeply redacts values for any key that matches the sensitive keys list (case-insensitive)
+  private redactDeep(value: unknown): unknown {
+    const sensitive = LoggingInterceptor.SENSITIVE_KEYS
+
+    const isPojo = (v: unknown) => Object.prototype.toString.call(v) === '[object Object]'
+
+    if (Array.isArray(value)) {
+      return (value as unknown[]).map((v) => this.redactDeep(v))
+    }
+    if (isPojo(value)) {
+      const out: Record<string, unknown> = {}
+      for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+        if (sensitive.has(k.toLowerCase())) {
+          out[k] = LoggingInterceptor.REDACTION
+        } else {
+          out[k] = this.redactDeep(v)
+        }
+      }
+      return out
+    }
+    return value
+  }
+
+  private maskToken(str: string): string {
+    if (typeof str !== 'string') return LoggingInterceptor.REDACTION
+    // Keep the last 4 chars to help debugging without exposing token
+    const visible = 4
+    if (str.length <= visible) return LoggingInterceptor.REDACTION
+    return `${'*'.repeat(Math.max(0, str.length - visible))}${str.slice(-visible)}`
+  }
+
+  private redactHeaders(headers: unknown = {}): Record<string, unknown> {
+    try {
+      const result: Record<string, unknown> = {}
+      for (const [key, val] of Object.entries(headers as Record<string, unknown>)) {
+        const lower = key.toLowerCase()
+        if (LoggingInterceptor.SENSITIVE_KEYS.has(lower)) {
+          if (lower === 'authorization' && typeof val === 'string') {
+            // Mask token while preserving scheme
+            const parts = val.split(' ')
+            if (parts.length === 2) {
+              result[key] = `${parts[0]} ${this.maskToken(parts[1])}`
+            } else {
+              result[key] = this.maskToken(val)
+            }
+          } else if ((lower === 'cookie' || lower === 'set-cookie') && typeof val === 'string') {
+            result[key] = LoggingInterceptor.REDACTION
+          } else {
+            result[key] = LoggingInterceptor.REDACTION
+          }
+        } else {
+          result[key] = val
+        }
+      }
+      return result
+    } catch {
+      return { headers: 'unavailable' }
+    }
+  }
+
   intercept(context: ExecutionContext, next: CallHandler): Observable<any> {
     const req = context.switchToHttp().getRequest()
     const res = context.switchToHttp().getResponse()
-    const { method, originalUrl, params, query, body } = req
+    const { method, originalUrl, params, query, body, headers } = req
     const start = Date.now()
 
+    const safeParams = this.redactDeep(params)
+    const safeQuery = this.redactDeep(query)
+    const safeBody = this.redactDeep(body)
+    const safeHeaders = this.redactHeaders(headers)
+
     this.logger.info(`Incoming Request: ${method} ${originalUrl}`, {
-      params,
-      query,
-      body,
+      params: safeParams,
+      query: safeQuery,
+      body: safeBody,
+      headers: safeHeaders,
     })
 
     return next.handle().pipe(
-      tap(() => {
+      tap((data) => {
         const duration = Date.now() - start
-        this.logger.info(`Response: ${method} ${originalUrl} ${res.statusCode} - ${duration}ms`)
+        const safeResponse = this.redactDeep(data)
+        this.logger.info(`Response: ${method} ${originalUrl} ${res.statusCode} - ${duration}ms`, {
+          response: safeResponse,
+        })
       }),
       catchError((err) => {
         const duration = Date.now() - start
         const statusCode = err.status || 500
+        const safeError = this.redactDeep(err?.response ?? {})
         this.logger.error(`Error: ${method} ${originalUrl} ${statusCode} - ${duration}ms`, {
           error: err.message,
+          details: safeError,
         })
         throw err
       })
