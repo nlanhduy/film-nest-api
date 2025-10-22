@@ -4,6 +4,9 @@ import { utilities as nestWinstonModuleUtilities } from 'nest-winston'
 import * as winston from 'winston'
 import 'winston-daily-rotate-file'
 
+// Loki configuration
+const lokiEnabled=process.env.LOKI_ENABLED === 'true'
+const lokiHost=process.env.LOKI_HOST || 'http://localhost:3100'
 // 🪄 custom format cho file log
 const fileFormat = winston.format.combine(
   winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
