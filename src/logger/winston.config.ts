@@ -3,6 +3,7 @@
 import { utilities as nestWinstonModuleUtilities } from 'nest-winston'
 import * as winston from 'winston'
 import 'winston-daily-rotate-file'
+import LokiTransport from 'winston-loki'
 
 // Loki configuration
 const lokiEnabled=process.env.LOKI_ENABLED === 'true'
@@ -16,23 +17,42 @@ const fileFormat = winston.format.combine(
   }),
 )
 
-export const winstonConfig: winston.LoggerOptions = {
-  transports: [
-    new winston.transports.Console({
-      format: winston.format.combine(
-        winston.format.timestamp(),
-        nestWinstonModuleUtilities.format.nestLike('FilmAPI', { prettyPrint: true }),
-      ),
-    }),
+const transports: winston.transport[]=[
+  new winston.transports.Console({
+    format:winston.format.combine(
+      winston.format.timestamp(),
+      nestWinstonModuleUtilities.format.nestLike('FilmAPI', { prettyPrint: true }),
+    )
+  }),
+  new winston.transports.DailyRotateFile({
+    dirname: 'logs',
+    filename: 'app-%DATE%.log',
+    datePattern: 'YYYY-MM-DD',
+    zippedArchive: true,
+    maxFiles: '7d',
+    level: 'info',
+    format: fileFormat,
+  }),
 
-    new winston.transports.DailyRotateFile({
-      dirname: 'logs',
-      filename: 'app-%DATE%.log',
-      datePattern: 'YYYY-MM-DD',
-      zippedArchive: true,
-      maxFiles: '7d',
-      level: 'info',
-      format: fileFormat,
+]
+
+// Add Loki transport if enabled
+if (lokiEnabled) {
+  transports.push(
+    new LokiTransport({
+      host: lokiHost,
+      labels: { 
+        app: 'film-nest-api',
+        environment: process.env.NODE_ENV || 'development'
+      },
+      json: true,
+      format: winston.format.json(),
+      replaceTimestamp: true,
+      onConnectionError: (err) => console.error('Loki connection error:', err),
     }),
-  ],
+  )
+}
+
+export const winstonConfig: winston.LoggerOptions = {
+  transports,
 }
