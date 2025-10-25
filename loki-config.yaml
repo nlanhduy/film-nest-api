@@ -1,0 +1,32 @@
+auth_enabled: false # Tắt auth cho dev, bật ở production
+
+server:
+  http_listen_port: 3100
+  grpc_listen_port: 9096
+
+common:
+  path_prefix: /loki
+  storage:
+    filesystem:
+      chunks_directory: /loki/chunks # Nơi lưu log data
+      rules_directory: /loki/rules
+  replication_factor: 1 # Single instance, prod thì > 1
+  ring:
+    kvstore:
+      store: inmemory
+
+schema_config:
+  configs:
+    - from: 2020-10-24
+      store: boltdb-shipper # Storage backend
+      object_store: filesystem
+      schema: v11
+      index:
+        prefix: index_
+        period: 24h # Tạo index mới mỗi 24h
+
+limits_config:
+  retention_period: 168h # Giữ log 7 ngày (có thể tăng)
+  ingestion_rate_mb: 10 # Max 10MB/s ingestion
+  ingestion_burst_size_mb: 20
+  max_query_length: 721h # Max query range (30 ngày)
