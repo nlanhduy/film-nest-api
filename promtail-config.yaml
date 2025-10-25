@@ -1,0 +1,28 @@
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+  filename: /tmp/positions.yaml
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+
+scrape_configs:
+  - job_name: file-logs
+    static_configs:
+      - targets: ["localhost"]
+        labels:
+          job: film-logs
+          app: film-nest-api
+          __path__: /logs/*.log
+    # Uncomment and adjust pipeline_stages if your logs are JSON and you want structured fields
+    # pipeline_stages:
+    #   - json:
+    #       expressions:
+    #         level: level
+    #         msg: message
+    #         ts: timestamp
+    #   - timestamp:
+    #       source: ts
+    #       format: RFC3339
