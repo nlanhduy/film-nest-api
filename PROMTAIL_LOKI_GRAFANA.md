@@ -83,9 +83,9 @@ To find more specific logs, for example only lines containing an HTTP method or 
 ## Security:
 
 The LoggingInterceptor automatically logs all incoming HTTP requests and outgoing responses in the NestJS application. It records details like method, URL, and duration while safely redacting sensitive information (e.g., passwords, tokens) before writing logs via Winston, making them secure and easy to visualize in tools like Loki and Grafana.
-Create a post request on swagger (with a password field in the request body):
+- Create a post request on swagger (with a password field in the request body):
 ![alt text](pictures/add_data_swagger.png)
-Log result (with password is hidden with alias: "[REDACTED]"):
+- Log result (with password is hidden with alias: "[REDACTED]"):
 ![alt text](pictures/result_security.png)
 
 ## Grafana:
