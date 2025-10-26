@@ -1,154 +1,100 @@
 # Promtail → Loki → Grafana (tail `./logs`)
 
-Tài liệu này hướng dẫn cách cấu hình Promtail để tail các file log trong thư mục `./logs` của project và gửi vào Loki, sau đó dùng Grafana để visualize.
+This document explains how to configure Promtail to tail the log files in the project's `./logs` directory and send them to Loki, then use Grafana to visualize them.
 
-Mục tiêu:
+Goals:
 
-- Promtail đọc file `./logs/*.log` và push lên Loki (`http://loki:3100`).
-- Grafana kết nối tới Loki để xem logs.
+- Promtail reads files `./logs/*.log` and pushes them to Loki (`http://loki:3100`).
+- Grafana connects to Loki to view logs.
 
-Nội dung:
+Contents:
 
-- Files đã thêm / chỉnh
-- Cách chạy (PowerShell)
-- Cách kiểm tra / debug
-- Tùy chọn: parse JSON, pattern, notes
-
----
-
-## Files liên quan (đã có trong project)
-
-- `promtail-config.yaml` — cấu hình Promtail (ở root)
-- `docker-compose.yml` — có service `loki`, `grafana`, `promtail` (Promtail mount `./logs`)
-- `loki-config.yaml` — config Loki (nếu dùng local filesystem)
-
-Nếu bạn chưa có những file này, xem phần "Cách chạy" để tạo hoặc yêu cầu mình tạo file tự động.
+- Files added/modified
+- How to run (PowerShell)
+- How to check / debug
+- Options: parse JSON, patterns, notes
 
 ---
 
-## promtail-config.yaml (hiện có)
+## Related files (present in the project)
 
-Promtail đã được cấu hình để tail tất cả file `*.log` trong thư mục `/logs` (container path). File config nằm ở `promtail-config.yaml`.
+- `promtail-config.yaml` — Promtail configuration (at project root)
+- `docker-compose.yml` — contains services `loki`, `grafana`, `promtail` (Promtail mounts `./logs`)
+- `loki-config.yaml` — Loki configuration (if using local filesystem)
 
-Chú ý: Promtail container sẽ mount `./logs` của project vào `/logs` trong container; do đó `__path__: /logs/*.log` sẽ match các file log trong thư mục project `logs`.
-
-Nếu log của bạn là JSON (structured), bạn có thể bật `pipeline_stages` để parse và extract các trường (ví dụ `level`, `message`, `timestamp`). Trong `promtail-config.yaml` mình để sẵn commented example để tiện bật.
+If you do not have these files yet, see the "How to run" section to create them or ask me to generate them automatically.
 
 ---
 
-## Chạy (PowerShell)
+## promtail-config.yaml (current)
 
-1. Start Loki, Grafana và Promtail:
+Promtail has been configured to tail all `*.log` files under the `/logs` directory (container path). The config file is located at `promtail-config.yaml`.
+
+Note: The Promtail container will mount the project's `./logs` into `/logs` inside the container; therefore `__path__: /logs/*.log` will match the log files in the project's logs directory.
+
+---
+
+## Run (PowerShell)
+
+1. Start Loki, Grafana, and Promtail:
 
 ```powershell
 docker-compose up -d loki grafana promtail
 ```
 
-2. Kiểm tra containers chạy:
+2. Check containers are running:
 
 ```powershell
 docker-compose ps
 ```
 
-3. Kiểm tra Loki sẵn sàng (cần chờ một thời gian -15s để container của Loki sẵn sàng):
+3. Check Loki readiness (optional) (you may need to wait ~15s for the Loki container to become ready):
 
 ```powershell
 curl http://localhost:3100/ready
-# expected: ready
 ```
 
-4. Kiểm tra logs của Promtail để xác nhận nó khởi thành công và mở file:
+4. Generate sample activity via Swagger
 
-```powershell
-docker logs film-promtail --tail 200
-docker exec -it film-promtail ls -la /logs
-docker exec -it film-promtail tail -n 50 /logs/app-2025-10-23.log
-```
+Open the Swagger UI at http://localhost:3000/api and send a few API requests (for example: create a film, list, update, or delete).
 
-5. Ghi thử 1 dòng vào file log (test):
+The goal is to produce real application logs — each request should be written to a log file (located at ./logs/app-YYYY-MM-DD.log).
 
-```powershell
-Add-Content -Path .\logs\app-2025-10-23.log -Value '{"level":"info","timestamp":"'"$(Get-Date -Format o)"'","message":"promtail test message"}'
-```
+After sending several successful requests, you can open the log file or check Grafana to see the corresponding records that Promtail collected and forwarded to Loki.
 
-6. Mở Grafana (ví dụ `http://localhost:3001`) → Explore → chọn datasource `Loki` → query:
+5. Open Grafana (for example `http://localhost:3001`) → Explore → select the `Loki` datasource → query:
 
 ```
 {app="film-nest-api"}
 ```
 
-Hoặc filter bằng job/label bạn cấu hình trong `promtail-config.yaml` (mình set `job: film-logs`, `app: film-nest-api`).
+Or filter by the job/label configured in `promtail-config.yaml` (`job: film-logs`, `app: film-nest-api`).
 
----
-
-## Troubleshooting (nếu không thấy logs)
-
-- Kiểm tra Promtail logs:
-
-```powershell
-docker logs film-promtail --tail 200
-```
-
-- Kiểm tra Promtail có thấy files trong `/logs`:
-
-```powershell
-docker exec -it film-promtail ls -la /logs
-```
-
-- Kiểm tra Loki ready:
-
-```powershell
-curl http://localhost:3100/ready
-```
-
-- Kiểm tra Grafana datasource (cần user/pass admin):
-
-```powershell
-curl -s -u admin:admin http://localhost:3001/api/datasources | ConvertFrom-Json
-```
-
-- Kiểm tra logs trực tiếp từ Loki (ví dụ tìm message test):
-
-```powershell
-curl -s "http://localhost:3100/loki/api/v1/query_range?query={app=\"film-nest-api\"}|=promtail%20test%20message&limit=20"
-```
-
----
-
-## Parse JSON logs (optional)
-
-Nếu file log có dòng là JSON, bạn có thể bật `pipeline_stages` để Promtail parse. Ví dụ (in `promtail-config.yaml`):
-
-```yaml
-pipeline_stages:
-  - json:
-      expressions:
-        level: level
-        msg: message
-        ts: timestamp
-  - timestamp:
-      source: ts
-      format: RFC3339
-```
-
-Sau khi bật, trong Grafana bạn có thể dùng `| json` để parse fields và filter theo `level`:
+To find more specific logs, for example only lines containing an HTTP method or an error message, add a text filter like:
 
 ```
-{app="film-nest-api"} | json | level="info"
+{app="film-nest-api"} |= "POST"
+{app="film-nest-api"} |= "GET"
+{app="film-nest-api"} |= "error"
 ```
 
----
+# DEMO
 
-## Notes & Security
+## Security:
 
-- Promtail cần quyền đọc thư mục `./logs`; ta mount với `:ro` trong `docker-compose.yml` để an toàn.
-- Nếu bạn triển khai production, cân nhắc storage backend cho Loki (S3/Cloud) và bật authentication cho Grafana/Loki.
+The LoggingInterceptor automatically logs all incoming HTTP requests and outgoing responses in the NestJS application. It records details like method, URL, and duration while safely redacting sensitive information (e.g., passwords, tokens) before writing logs via Winston, making them secure and easy to visualize in tools like Loki and Grafana.
+Create a post request on swagger (with a password field in the request body):
+![alt text](pictures/add_data_swagger.png)
+Log result (with password is hidden with alias: "[REDACTED]"):
+![alt text](pictures/result_security.png)
 
----
+## Grafana:
 
-Nếu bạn muốn, mình có thể:
+After create api logs on swagger, we can search on Grafana.
+Example:
 
-- Thêm `pipeline_stages` vào `promtail-config.yaml` để tự parse JSON từ log hiện tại.
-- Tạo một Grafana dashboard mẫu và provision nó.
+- Query 'POST' request on Grafana:
+  ![alt text](pictures/grafana_post.png)
 
-Hoặc mình có thể chạy các lệnh kiểm tra giúp bạn (ví dụ `docker-compose up -d promtail`) nếu bạn cho phép.
+- Query 'error' request on Grafana:
+  ![alt text](pictures/grafana_error.png)
